@@ -281,6 +281,43 @@ async function call(path, options) {
 
 // Jira Cloud replaced /search with /search/jql; Server/DC still has the old one.
 // v2 is used on purpose: it returns plain text instead of ADF documents.
+// The order a board is read in: columns left to right, and within a column the
+// issues top to bottom.
+//
+// The columns come from the status category — «to do», «in progress», «done» is
+// the order every board puts them in. Top to bottom inside a column is the rank,
+// which is what the query asks Jira for, so whatever order the issues arrive in
+// is kept as it is: the sort below only moves them between columns.
+const COLUMNS = { new: 0, indeterminate: 1, done: 2 };
+
+function boardColumn(issue) {
+  const category = (((issue.fields || {}).status || {}).statusCategory || {}).key;
+  // An unknown category sits where work in progress does: in the middle, rather
+  // than pretending to be either the next thing to do or something finished.
+  return COLUMNS[category] === undefined ? 1 : COLUMNS[category];
+}
+
+function inBoardOrder(issues) {
+  return issues
+    .map((issue, index) => ({ issue, index }))
+    .sort((left, right) => (boardColumn(left.issue) - boardColumn(right.issue)) || (left.index - right.index))
+    .map((entry) => entry.issue);
+}
+
+// Rank is a Jira Software field. Jira without the agile part has no such thing and
+// answers a 400, so the order is asked for and quietly given up on where it does
+// not exist — the columns still come out right, only the order inside them changes.
+async function searchInBoardOrder(jql) {
+  try {
+    return inBoardOrder(await search(jql));
+  } catch (error) {
+    const message = String((error && error.message) || '');
+    if (!/rank/i.test(message) || !/\brank\b/i.test(jql)) { throw error; }
+    fa.log('этот Jira не знает поле Rank — порядок внутри колонок по дате обновления');
+    return inBoardOrder(await search(jql.replace(/\border\s+by\b[\s\S]*$/i, 'ORDER BY updated DESC')));
+  }
+}
+
 async function search(jql) {
   const body = {
     jql,
@@ -393,9 +430,9 @@ function defaultFilters() {
   const ru = state.locale === 'ru';
   return [
     { title: ru ? 'Мои задачи' : 'My issues',
-      jql: 'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC' },
+      jql: 'assignee = currentUser() AND resolution = Unresolved ORDER BY Rank ASC' },
     { title: ru ? 'Я автор' : 'Reported by me',
-      jql: 'reporter = currentUser() AND resolution = Unresolved ORDER BY updated DESC' },
+      jql: 'reporter = currentUser() AND resolution = Unresolved ORDER BY Rank ASC' },
     { title: ru ? 'Наблюдаю' : 'Watching',
       jql: 'watcher = currentUser() AND resolution = Unresolved ORDER BY updated DESC' },
   ];
@@ -659,7 +696,7 @@ fa.plugin({
     state.error = '';
     fa.update();
     try {
-      const issues = await search(filter.jql);
+      const issues = await searchInBoardOrder(filter.jql);
       fa.log('фильтр «' + filter.title + '»: задач ' + issues.length + ' | ' + filter.jql);
       // Each filter remembers its own issues: switching filters is not news, it is
       // just a different question asked of the same Jira.

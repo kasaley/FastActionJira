@@ -4,7 +4,7 @@
   "caption": "JIRA",
   "icon": "checklist",
   "summary": "Задачи Jira по вашим фильтрам: статус и приоритет в строке, описание и комментарии в панели, центр уведомлений, переход в браузер и копирование номера или ссылки.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "FastAction",
   "apiVersion": 1,
   "entry": "plugin.js",
@@ -88,6 +88,6 @@
   ],
   "refreshMinutes": 5,
   "integrity": {
-    "plugin.js": "sha256-d1cf4edbd1cded0806cf90de8240fe6bb4b65652754c35fe5840e4691a2ae319"
+    "plugin.js": "sha256-2ac1884fc31007ac1eaf751bcb9416e0ed1cf475f00a1be034a79b66afcac4b0"
   }
 }
