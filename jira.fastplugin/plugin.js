@@ -281,19 +281,22 @@ async function call(path, options) {
 
 // Jira Cloud replaced /search with /search/jql; Server/DC still has the old one.
 // v2 is used on purpose: it returns plain text instead of ADF documents.
-// The order a board is read in: columns left to right, and within a column the
-// issues top to bottom.
+// The board read from the right: the further right a column sits, the further
+// along the work is, and the more it deserves attention. So what is in progress
+// comes before what has not been started. Top to bottom inside a column is the
+// rank, which is what the query asks Jira for — the sort below is stable and only
+// moves issues between columns, never within one.
 //
-// The columns come from the status category — «to do», «in progress», «done» is
-// the order every board puts them in. Top to bottom inside a column is the rank,
-// which is what the query asks Jira for, so whatever order the issues arrive in
-// is kept as it is: the sort below only moves them between columns.
-const COLUMNS = { new: 0, indeterminate: 1, done: 2 };
+// Finished work is the exception to «right first». It sits at the right end of
+// every board, but a closed task at the top of the list would be nobody's idea of
+// a priority. The built-in filters ask for unresolved issues only and never see
+// it; a filter of your own might, and then it belongs at the bottom.
+const COLUMNS = { indeterminate: 0, new: 1, done: 2 };
 
 function boardColumn(issue) {
   const category = (((issue.fields || {}).status || {}).statusCategory || {}).key;
-  // An unknown category sits where work in progress does: in the middle, rather
-  // than pretending to be either the next thing to do or something finished.
+  // A status whose category nobody set reads as «not started»: better to leave it
+  // below real work in progress than to lift it above.
   return COLUMNS[category] === undefined ? 1 : COLUMNS[category];
 }
 
